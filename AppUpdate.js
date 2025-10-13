@@ -134,6 +134,32 @@ function extractAppIds(rawArg) {
 }
 
 /**
+ * 比较两个版本号。
+ * @param {string} v1 - 版本号 1
+ * @param {string} v2 - 版本号 2
+ * @returns {number} - 0: v1 == v2, 1: v1 > v2, -1: v1 < v2
+ */
+function versionCompare(v1, v2) {
+    if (v1 === v2) return 0;
+    // 如果其中一个为空，则非空的大
+    if (!v1) return -1;
+    if (!v2) return 1;
+
+    const parts1 = v1.split('.').map(Number);
+    const parts2 = v2.split('.').map(Number);
+    const len = Math.max(parts1.length, parts2.length);
+
+    for (let i = 0; i < len; i++) {
+        const num1 = parts1[i] || 0;
+        const num2 = parts2[i] || 0;
+
+        if (num1 > num2) return 1;
+        if (num1 < num2) return -1;
+    }
+    return 0; // 理论上只有版本号完全一致（例如 1.0 和 1.0.0）才会到这里
+}
+
+/**
  * 检查单个 App 更新
  */
 async function checkApp(app) {
@@ -149,8 +175,12 @@ async function checkApp(app) {
 
     console.log(`正在检查 [${name}]: 商店版本='${version}', 本地记录版本='${lastVersion}'`);
 
-    if (lastVersion !== version) {
+    // *** 关键修改：只有当商店版本严格高于本地版本时，才发送通知和更新记录 ***
+    // versionCompare(version, lastVersion) > 0  -> 商店版本 > 本地版本
+    // !lastVersion                            -> 首次运行，本地无记录
+    if (!lastVersion || versionCompare(version, lastVersion) > 0) {
       console.log(`[${name}] 检测到新版本 ${version}，准备发送通知...`);
+      
       let summary = "";
       try {
         if (USE_OPENAI_SUMMARY && OPENAI_API_KEY && OPENAI_API_URL) {
@@ -164,10 +194,15 @@ async function checkApp(app) {
       }
 
       $notification.post(`${name} 更新啦 🎉`, `版本：${version}`, summary, appUrl);
-      $persistentStore.write(version, STORE_KEY);
+      $persistentStore.write(version, STORE_KEY); // 只有当版本更高时才更新本地记录
       console.log(`[${name}] (${appId}) 更新至 ${version}，通知已发送。`);
       return { id: appId, name, version, updated: true, notes: summary, url: appUrl };
-    } else {
+    } else if (versionCompare(version, lastVersion) < 0) {
+        // 商店版本低于本地记录版本（如 3.3.4 < 3.3.5）
+        console.log(`[${name}] 商店版本 ${version} 低于本地记录版本 ${lastVersion}，跳过通知。`);
+        return { id: appId, name, version, updated: false, reason: "Store version is lower" };
+    } 
+    else { // versionCompare(version, lastVersion) === 0
       console.log(`[${name}] 无新版本。`);
       return { id: appId, name, version, updated: false };
     }
@@ -211,4 +246,3 @@ main().catch(err => {
   console.error(`脚本执行出现致命错误: ${err}`);
   $done();
 });
-
