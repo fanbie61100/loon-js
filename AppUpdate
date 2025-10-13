@@ -1,0 +1,151 @@
+/**
+ * AppUpdate.js - 批量检测 App Store 更新（自动提取 ID 链接版）
+ *
+ * 使用说明：
+ * - 在 Loon 插件 Argument 中填写 app_ids，例如：
+ *   https://apps.apple.com/us/app/my-baby-unicorn/id1442079205?l=zh-Hans-CN,1051902027
+ * - 支持逗号、空格、分号、换行、中文逗号分隔
+ * - 自动提取 URL 中 id 后面的数字
+ * - 无默认 ID：未传入有效 ID，脚本直接退出
+ */
+
+const AGGREGATE = false; // 是否合并通知（false = 每个 App 单独通知）
+
+/* ---------------------- 辅助函数 ---------------------- */
+
+/**
+ * 提取输入中所有有效 App ID
+ * @param {string|object} rawArg - $argument 或字符串
+ * @returns {string[]} - 数字 App ID 数组
+ */
+function extractAppIds(rawArg) {
+  if (!rawArg) return [];
+
+  let rawStr = "";
+
+  // 支持对象 argument
+  if (typeof rawArg === "object" && rawArg !== null) {
+    const preferKeys = ["app_ids", "appIds", "arg", "arg1", "arg0"];
+    for (const k of preferKeys) {
+      if (Object.prototype.hasOwnProperty.call(rawArg, k) && rawArg[k]) {
+        rawStr = String(rawArg[k]);
+        break;
+      }
+    }
+    if (!rawStr) {
+      rawStr = Object.keys(rawArg).map(k => String(rawArg[k] || "")).join(",");
+    }
+  }
+
+  // 支持字符串 argument
+  if (typeof rawArg === "string") rawStr = rawArg;
+
+  // 按多种分隔符拆分
+  const items = rawStr.split(/[\s,;，\n\r]+/).map(s => s.trim()).filter(Boolean);
+
+  // 提取 id 后的数字或纯数字 ID
+  const ids = items.map(s => {
+    const match = s.match(/id(\d+)/i);
+    if (match) return match[1];
+    if (/^\d+$/.test(s)) return s;
+    return null;
+  }).filter(Boolean);
+
+  return ids;
+}
+
+function getAppInfo(appId) {
+  const url = `https://itunes.apple.com/lookup?id=${appId}`;
+  return new Promise((resolve, reject) => {
+    $httpClient.get(url, (err, resp, data) => {
+      if (err) return reject(err);
+      try {
+        const obj = JSON.parse(data);
+        if (obj && obj.resultCount > 0) resolve(obj.results[0]);
+        else reject(new Error(`App ID ${appId} 未找到信息`));
+      } catch (e) {
+        reject(e);
+      }
+    });
+  });
+}
+
+async function checkApp(appId) {
+  const STORE_KEY = `app_update_${appId}_version`;
+  try {
+    const info = await getAppInfo(appId);
+    const name = info.trackName || `App(${appId})`;
+    const version = info.version || "";
+    const appUrl = info.trackViewUrl || `https://apps.apple.com/app/id${appId}`;
+    const notes = info.releaseNotes || "暂无更新日志";
+
+    const lastVersion = $persistentStore.read(STORE_KEY);
+    if (lastVersion !== version) {
+      const shortNotes = notes.split("\n").slice(0, 5).join("\n");
+      const title = `${name} 更新啦 🎉`;
+      const sub = `版本：${version}`;
+      const content = `${shortNotes}`;
+      $notification.post(title, sub, content, appUrl);
+      $persistentStore.write(version, STORE_KEY);
+      console.log(`${name} (${appId}) 更新至 ${version}，已通知。`);
+      return { id: appId, name, version, updated: true, notes: shortNotes, url: appUrl };
+    } else {
+      console.log(`${name} (${appId}) 无更新（当前版本 ${version}）`);
+      return { id: appId, name, version, updated: false };
+    }
+  } catch (err) {
+    console.error(`App ID ${appId} 检测失败：`, err && err.message ? err.message : err);
+    return { id: appId, error: err && err.message ? err.message : String(err) };
+  }
+}
+
+async function main() {
+  // 解析 $argument
+  const rawArg = (typeof $argument !== "undefined") ? $argument : "";
+  let ids = extractAppIds(rawArg);
+
+  // 兼容从 persistentStore 读取 app_ids
+  if ((!ids || ids.length === 0) && typeof $persistentStore !== "undefined") {
+    const stored = $persistentStore.read("app_ids") || "";
+    if (stored) ids = ids.concat(extractAppIds(stored));
+  }
+
+  if (!ids || ids.length === 0) {
+    console.error("请在插件 Argument 中传入至少一个 App ID（例如：1051902027 或完整 App 链接）");
+    $done();
+    return;
+  }
+
+  // 过滤纯数字有效 ID
+  const validIds = ids.filter(id => /^\d+$/.test(id));
+  if (validIds.length === 0) {
+    console.error("未发现有效的数字型 App ID，请检查输入格式。");
+    $done();
+    return;
+  }
+
+  // 顺序检测
+  const results = [];
+  for (const id of validIds) {
+    // eslint-disable-next-line no-await-in-loop
+    const r = await checkApp(id);
+    results.push(r);
+  }
+
+  // 可选：合并通知
+  if (AGGREGATE) {
+    const updated = results.filter(r => r.updated);
+    if (updated.length > 0) {
+      const title = `AppStore: ${updated.length} 个应用有更新`;
+      const lines = updated.map(u => `${u.name} → ${u.version}`).slice(0, 10);
+      const content = lines.join("\n");
+      $notification.post(title, "", content);
+    } else {
+      console.log("没有应用更新，合并通知未发送。");
+    }
+  }
+
+  $done();
+}
+
+main();
