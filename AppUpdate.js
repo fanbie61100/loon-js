@@ -11,7 +11,7 @@
 /* ---------------------- 用户配置区 ---------------------- */
 const USE_OPENAI_SUMMARY = true;
 const OPENAI_API_URL = "https://free.v36.cm/v1/chat/completions";
-const OPENAI_API_KEY = "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+const OPENAI_API_KEY = "sk-9xWv9xwILwqw5g8hC363B532B9Ad4f21BfBfA3019c988f0f";
 
 /* ---------------------- 辅助函数 ---------------------- */
 
