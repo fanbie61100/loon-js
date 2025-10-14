@@ -1,42 +1,12 @@
-/**
- * AppUpdate.js - 批量检测 App Store 更新（集成 OpenAI 日志精简 & 多区回退版）
- *
- * 功能：
- * - 监控 App Store 应用更新并发送通知。
- * - 自动从 URL 或纯数字 ID 中提取 App ID，并识别国家/地区。
- * - (新) 可选：调用 OpenAI API 将更新日志精简为 20 字以内的简体中文摘要。
- *
- * v3.0 更新日志：
- * - 自动解析 URL 国家/地区（如 cn、us）并查询对应 App Store。
- * - 如果指定国家查询失败，自动回退到 us 区查询。
- * - 支持连续 URL 自动分隔。
- */
+const USE_OPENAI_SUMMARY = true;
+const OPENAI_API_URL = "https://api.chatanywhere.tech/v1/chat/completions";
+const OPENAI_API_KEY = "sk-36yyo8cliEsad9VfzXj4QP05C4DIYK0lJBUqEMRPqbZiHJLs";
 
-/* ---------------------- 用户配置区 ---------------------- */
-// --- OpenAI 日志精简配置 ---
-const USE_OPENAI_SUMMARY = true; // 总开关：是否启用 OpenAI 精简日志功能
-const OPENAI_API_URL = "https://api.chatanywhere.tech/v1/chat/completions"; // OpenAI API URL
-const OPENAI_API_KEY = "sk-36yyo8cliEsad9VfzXj4QP05C4DIYK0lJBUqEMRPqbZiHJLs"; // OpenAI API KEY
-
-/* ---------------------- 辅助函数 ---------------------- */
-
-/**
- * 提取 App Store URL 中的国家代码
- * @param {string} url - App Store 应用链接
- * @returns {string} - 国家代码（如 'cn'、'us'），默认 'us'
- */
 function extractCountryCode(url) {
   const match = url.match(/https:\/\/apps\.apple\.com\/([a-z]{2})\//i);
   return match ? match[1].toLowerCase() : 'us';
 }
 
-/**
- * 获取 App Store 应用信息（可选国家/地区，失败回退 us）
- * @param {string} appId - 应用 ID
- * @param {string} url - 可选 App Store URL
- * @param {boolean} fallback - 是否允许回退到 us 区
- * @returns {Promise<object>} - 应用信息
- */
 async function getAppInfo(appId, url = "", fallback = true) {
   const countryCode = url ? extractCountryCode(url) : 'us';
   const apiUrl = `https://itunes.apple.com/${countryCode}/lookup?id=${appId}`;
@@ -66,9 +36,6 @@ async function getAppInfo(appId, url = "", fallback = true) {
   });
 }
 
-/**
- * 使用 OpenAI API 精简更新日志
- */
 function summarizeNotes(notes) {
   if (!notes || notes.trim() === "") return Promise.resolve("暂无更新日志。");
   return new Promise((resolve, reject) => {
@@ -102,25 +69,18 @@ function summarizeNotes(notes) {
   });
 }
 
-/**
- * 提取输入中所有有效 App ID 和对应 URL (已简化)
- */
 function extractAppIds(rawArg) {
   if (!rawArg) return [];
-  
-  // *** 简化部分开始：只检查 rawArg.app_ids 或 rawArg 自身是否为字符串 ***
+
   let rawStr = "";
   if (typeof rawArg === 'object' && rawArg !== null && rawArg.app_ids) {
     rawStr = String(rawArg.app_ids);
   } else if (typeof rawArg === 'string') {
     rawStr = rawArg;
   } else {
-    // 既不是字符串，也不是带 app_ids 键的对象，则无法处理
     return [];
   }
-  // *** 简化部分结束 ***
 
-  // 自动分隔连续 URL
   const separatorRegex = /(https:\/\/apps\.apple\.com\/.*?)https:\/\//gi;
   if (rawStr.includes('apps.apple.com/') && separatorRegex.test(rawStr)) {
     rawStr = rawStr.replace(separatorRegex, '$1,https://');
@@ -137,15 +97,8 @@ function extractAppIds(rawArg) {
   return result;
 }
 
-/**
- * 比较两个版本号。
- * @param {string} v1 - 版本号 1
- * @param {string} v2 - 版本号 2
- * @returns {number} - 0: v1 == v2, 1: v1 > v2, -1: v1 < v2
- */
 function versionCompare(v1, v2) {
     if (v1 === v2) return 0;
-    // 如果其中一个为空，则非空的大
     if (!v1) return -1;
     if (!v2) return 1;
 
@@ -160,12 +113,9 @@ function versionCompare(v1, v2) {
         if (num1 > num2) return 1;
         if (num1 < num2) return -1;
     }
-    return 0; // 理论上只有版本号完全一致（例如 1.0 和 1.0.0）才会到这里
+    return 0;
 }
 
-/**
- * 检查单个 App 更新
- */
 async function checkApp(app) {
   const { id: appId, url: appUrlRaw } = app;
   const STORE_KEY = `app_update_${appId}_version`;
@@ -179,9 +129,6 @@ async function checkApp(app) {
 
     console.log(`正在检查 [${name}]: 商店版本='${version}', 本地记录版本='${lastVersion}'`);
 
-    // *** 关键修改：只有当商店版本严格高于本地版本时，才发送通知和更新记录 ***
-    // versionCompare(version, lastVersion) > 0  -> 商店版本 > 本地版本
-    // !lastVersion                            -> 首次运行，本地无记录
     if (!lastVersion || versionCompare(version, lastVersion) > 0) {
       console.log(`[${name}] 检测到新版本 ${version}，准备发送通知...`);
       
@@ -198,15 +145,14 @@ async function checkApp(app) {
       }
 
       $notification.post(`${name} 更新啦 🎉`, `版本：${version}`, summary, appUrl);
-      $persistentStore.write(version, STORE_KEY); // 只有当版本更高时才更新本地记录
+      $persistentStore.write(version, STORE_KEY);
       console.log(`[${name}] (${appId}) 更新至 ${version}，通知已发送。`);
       return { id: appId, name, version, updated: true, notes: summary, url: appUrl };
     } else if (versionCompare(version, lastVersion) < 0) {
-        // 商店版本低于本地记录版本（如 3.3.4 < 3.3.5）
         console.log(`[${name}] 商店版本 ${version} 低于本地记录版本 ${lastVersion}，跳过通知。`);
         return { id: appId, name, version, updated: false, reason: "Store version is lower" };
     }
-    else { // versionCompare(version, lastVersion) === 0
+    else {
       console.log(`[${name}] 无新版本。`);
       return { id: appId, name, version, updated: false };
     }
@@ -217,21 +163,15 @@ async function checkApp(app) {
   }
 }
 
-/**
- * 主函数
- */
 async function main() {
-  // $argument 可能是字符串或对象
   const rawArg = (typeof $argument !== "undefined") ? $argument : "";
   let apps = extractAppIds(rawArg);
 
   if ((!apps || apps.length === 0) && typeof $persistentStore !== "undefined") {
-    // 尝试从持久化存储中读取 App ID
     const stored = $persistentStore.read("app_ids") || "";
     if (stored) apps = apps.concat(extractAppIds(stored));
   }
 
-  // 确保 App ID 唯一
   const uniqueApps = [...new Map(apps.map(a => [a.id, a])).values()];
 
   if (uniqueApps.length === 0) {
