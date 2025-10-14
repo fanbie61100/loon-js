@@ -4,14 +4,19 @@
  * 功能：
  * - 监控 App Store 应用更新并发送通知。
  * - 自动从 URL 或纯数字 ID 中提取 App ID，并识别国家/地区。
- * - 调用 OpenAI API 将更新日志精简为 20 字以内的简体中文摘要。
+ * - (新) 可选：调用 OpenAI API 将更新日志精简为 20 字以内的简体中文摘要。
+ *
+ * v3.0 更新日志：
+ * - 自动解析 URL 国家/地区（如 cn、us）并查询对应 App Store。
+ * - 如果指定国家查询失败，自动回退到 us 区查询。
+ * - 支持连续 URL 自动分隔。
  */
 
 /* ---------------------- 用户配置区 ---------------------- */
 // --- OpenAI 日志精简配置 ---
 const USE_OPENAI_SUMMARY = true; // 总开关：是否启用 OpenAI 精简日志功能
-const OPENAI_API_URL = "https://free.v36.cm/v1/chat/completions"; // OpenAI API URL
-const OPENAI_API_KEY = "sk-9xWv9xwILwqw5g8hC363B532B9Ad4f21BfBfA3019c988f0f"; // OpenAI API KEY
+const OPENAI_API_URL = "https://api.chatanywhere.tech/v1/chat/completions"; // OpenAI API URL
+const OPENAI_API_KEY = "sk-36yyo8cliEsad9VfzXj4QP05C4DIYK0lJBUqEMRPqbZiHJLs"; // OpenAI API KEY
 
 /* ---------------------- 辅助函数 ---------------------- */
 
@@ -72,9 +77,9 @@ function summarizeNotes(notes) {
       "Authorization": `Bearer ${OPENAI_API_KEY}`,
     };
     const body = {
-      model: "gpt-3.5-turbo",
+      model: "gpt-4o-mini",
       messages: [
-        { role: "system", content: "你是更新日志总结助手，将日志总结为20字以内的简体中文摘要，不要额外解释，不要出现版本号信息和软件名。" },
+        { role: "system", content: "你是更新日志总结助手，将日志总结为45 字以内的简体中文摘要，要面面俱到，但不要花里胡哨排版和详细解释，也不要出现版本号信息和软件名。" },
         { role: "user", content: notes }
       ],
       max_tokens: 60,
