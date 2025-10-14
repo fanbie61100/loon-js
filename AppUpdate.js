@@ -79,7 +79,7 @@ function summarizeNotes(notes) {
     const body = {
       model: "gpt-4o-mini",
       messages: [
-        { role: "system", content: "你是更新日志总结助手，将日志总结为45 字以内的简体中文摘要，要面面俱到，但不要花里胡哨排版和详细解释，也不要出现版本号信息和软件名。" },
+        { role: "system", content: "你是更新日志总结助手，将日志总结为45 字以内的简体中文摘要，不要遗漏内容，摘要中不许出现版本号信息和软件名。" },
         { role: "user", content: notes }
       ],
       max_tokens: 60,
