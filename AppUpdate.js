@@ -103,18 +103,22 @@ function summarizeNotes(notes) {
 }
 
 /**
- * 提取输入中所有有效 App ID 和对应 URL
+ * 提取输入中所有有效 App ID 和对应 URL (已简化)
  */
 function extractAppIds(rawArg) {
   if (!rawArg) return [];
+  
+  // *** 简化部分开始：只检查 rawArg.app_ids 或 rawArg 自身是否为字符串 ***
   let rawStr = "";
-  if (typeof rawArg === 'object' && rawArg !== null) {
-    const preferKeys = ["app_ids", "appIds", "arg", "arg1", "arg0"];
-    for (const k of preferKeys) {
-      if (Object.prototype.hasOwnProperty.call(rawArg, k) && rawArg[k]) { rawStr = String(rawArg[k]); break; }
-    }
-    if (!rawStr) rawStr = Object.keys(rawArg).map(k => String(rawArg[k]||"")).join(",");
-  } else if (typeof rawArg === 'string') rawStr = rawArg;
+  if (typeof rawArg === 'object' && rawArg !== null && rawArg.app_ids) {
+    rawStr = String(rawArg.app_ids);
+  } else if (typeof rawArg === 'string') {
+    rawStr = rawArg;
+  } else {
+    // 既不是字符串，也不是带 app_ids 键的对象，则无法处理
+    return [];
+  }
+  // *** 简化部分结束 ***
 
   // 自动分隔连续 URL
   const separatorRegex = /(https:\/\/apps\.apple\.com\/.*?)https:\/\//gi;
@@ -201,7 +205,7 @@ async function checkApp(app) {
         // 商店版本低于本地记录版本（如 3.3.4 < 3.3.5）
         console.log(`[${name}] 商店版本 ${version} 低于本地记录版本 ${lastVersion}，跳过通知。`);
         return { id: appId, name, version, updated: false, reason: "Store version is lower" };
-    } 
+    }
     else { // versionCompare(version, lastVersion) === 0
       console.log(`[${name}] 无新版本。`);
       return { id: appId, name, version, updated: false };
@@ -217,14 +221,17 @@ async function checkApp(app) {
  * 主函数
  */
 async function main() {
+  // $argument 可能是字符串或对象
   const rawArg = (typeof $argument !== "undefined") ? $argument : "";
   let apps = extractAppIds(rawArg);
 
   if ((!apps || apps.length === 0) && typeof $persistentStore !== "undefined") {
+    // 尝试从持久化存储中读取 App ID
     const stored = $persistentStore.read("app_ids") || "";
     if (stored) apps = apps.concat(extractAppIds(stored));
   }
 
+  // 确保 App ID 唯一
   const uniqueApps = [...new Map(apps.map(a => [a.id, a])).values()];
 
   if (uniqueApps.length === 0) {
