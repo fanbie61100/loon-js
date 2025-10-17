@@ -8,10 +8,10 @@ if (url.includes("/v6/account/loadConfig?key=my_page_card_config")) {
         if (item.entities) {
             item.entities = item.entities.filter(entity => entity.entityType !== 'textLink');
         }
-        return item.entityType !== 'textLink' && ![1001, 1003, 1004, 1005].includes(item.entityId);
+        return item.entityType !== 'textLink' && item.entityId !== 1004 && item.entityId !== 1005 && item.entityId !== 1001 && item.entityId !== 1003;
     });
 } else if (url.includes("/v6/page/dataList")) {
-    obj.data = obj.data.filter(item => item.title !== "话题热议" && ![36104,24309,12889,21063,35730,35846,28374,28375,27332,20090,28773,29343,21106].includes(item.entityId));
+    obj.data = obj.data.filter(item => item.title !== "话题热议" && item.entityId !== 36104 && item.entityId !== 24309 && item.entityId !== 12889 && item.entityId !== 21063 && item.entityId !== 35730 && item.entityId !== 35846 && item.entityId !== 28374 && item.entityId !== 28375 && item.entityId !== 27332 && item.entityId !== 20090 && item.entityId !== 28773 && item.entityId !== 29343 && item.entityId !== 21106);
     obj.data.forEach(item => {
         if (item.entities) {
             item.entities = item.entities.filter(entity => entity.title !== "睡个好觉需要什么？");
@@ -19,26 +19,29 @@ if (url.includes("/v6/account/loadConfig?key=my_page_card_config")) {
     });
 } else if (url.includes("/v6/main/indexV8")) {
     obj.data = obj.data.filter(item => 
-        ![32557,29349,28621].includes(item.entityId) &&
-        !(typeof item.title === 'string' && (item.title.includes("值得买") || item.title.includes("红包")))
+        item.entityId !== 32557 && 
+        item.entityId !== 29349 && 
+        item.entityId !== 28621 &&
+        !(typeof item.title === 'string' && item.title.includes("值得买")) &&
+        !(typeof item.title === 'string' && item.title.includes("红包"))
     );
 } else if (url.includes("/v6/main/init")) {
-    // ✅ 只保留标题为“话题”、“关注”、“头条”的项目
-    const keepTitles = ["话题", "关注", "头条"];
-    obj.data = obj.data.filter(item => {
-        if (item.entities && Array.isArray(item.entities)) {
-            item.entities = item.entities.filter(entity => keepTitles.includes(entity.title));
+    obj.data = obj.data.filter(item => ![944, 945,24455,36839,1635].includes(item.entityId) && item.title !== "关注");
+    obj.data.forEach(item => {
+        if (item.entities) {
+            item.entities = item.entities.filter(entity => {
+                // MODIFIED LINE: Added "话题" and "头条"
+                return ![1635,2261, 1633, 413, 417, 1754, 1966, 2274, 1170, 1175, 1190, 2258].includes(entity.entityId) && entity.title !== "关注" && entity.title !== "话题" && entity.title !== "头条";
+            });
         }
-        return keepTitles.includes(item.title);
     });
 }
 
-obj.data?.forEach(item => {
+obj.data.forEach(item => {
     if (item.extraDataArr) {
         delete item.extraDataArr['SplashAd.Type'];
         delete item.extraData;
         delete item.extraDataArr;
     }
 });
-
 $done({ body: JSON.stringify(obj) });
